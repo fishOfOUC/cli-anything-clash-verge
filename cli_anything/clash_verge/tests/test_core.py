@@ -890,3 +890,51 @@ class TestProcess:
 
     def test_log_files_empty_dir(self, tmp_path: Path):
         assert process_module.log_files(tmp_path) == []
+
+
+# ===========================================================================
+class TestReplSkinTable:
+    """Regression guard for the rendering layer.
+
+    Many commands call ``ReplSkin.table(..., title=...)``. Before ``title``
+    existed as a parameter every one of them died with a TypeError — and the
+    suite stayed green because tests only ever invoked the CLI with ``--json``,
+    which bypasses table rendering entirely.
+    """
+
+    @pytest.fixture
+    def skin(self):
+        from cli_anything.clash_verge.utils.repl_skin import ReplSkin
+
+        return ReplSkin("clash-verge", version="1.0.0")
+
+    def test_table_accepts_title(self, skin, capsys):
+        skin.table(
+            ["Group", "Selected"],
+            [["GLOBAL", "DIRECT"]],
+            title="Current selection",
+        )
+        out = capsys.readouterr().out
+        assert "Current selection" in out
+        assert "GLOBAL" in out
+        assert "DIRECT" in out
+
+    def test_table_without_title_still_renders(self, skin, capsys):
+        skin.table(["Header"], [["cell"]])
+        out = capsys.readouterr().out
+        assert "Header" in out
+        assert "cell" in out
+
+    def test_table_accepts_full_signature(self, skin, capsys):
+        """Cover every keyword the CLI passes, together."""
+        skin.table(["h"], [["r"]], max_col_width=10, title="T")
+        out = capsys.readouterr().out
+        assert "T" in out
+        assert "h" in out
+        assert "r" in out
+
+    def test_table_truncates_to_max_col_width(self, skin, capsys):
+        skin.table(["h"], [["x" * 50]], max_col_width=8)
+        out = capsys.readouterr().out
+        assert "x" * 8 in out
+        assert "x" * 9 not in out

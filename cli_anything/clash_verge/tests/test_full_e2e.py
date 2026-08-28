@@ -672,6 +672,115 @@ class TestSafety:
         result = run_json(runner, ["--home", str(home), "session", "undo"])
         assert payload_of(result)["undone"] is None
 
+
+# ===========================================================================
+class TestHumanReadableRendering:
+    """Render every command the way a human sees it — with no ``--json``.
+
+    This path was entirely untested, which is how ``ReplSkin.table()`` missing
+    its ``title`` parameter could crash the ``proxy`` commands while the whole
+    suite stayed green: every existing test invoked the CLI with ``--json``,
+    which never touches the table renderer.
+    """
+
+    @classmethod
+    def _run(
+        cls, runner: CliRunner, args: list[str], expect_ok: bool = True
+    ):
+        result = runner.invoke(cli, args, obj={})
+        assert not isinstance(result.exception, TypeError), (
+            f"{args} raised {result.exception!r}\noutput={result.output}"
+        )
+        if expect_ok:
+            assert result.exit_code == 0, (
+                f"command failed: {args}\n"
+                f"exit={result.exit_code}\n"
+                f"output={result.output}\n"
+                f"exception={result.exception!r}"
+            )
+        return result
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["profile", "list"],
+            ["profile", "current"],
+            ["verge", "list"],
+            ["clash", "list"],
+            ["env", "info"],
+            ["env", "paths"],
+            ["session", "show"],
+        ],
+    )
+    def test_file_commands_render(
+        self, runner: CliRunner, populated_home: Path, args
+    ):
+        result = self._run(runner, ["--home", str(populated_home), *args])
+        assert result.output.strip()
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["proxy", "groups"],
+            ["proxy", "current"],
+            ["proxy", "nodes"],
+            ["proxy", "providers"],
+            ["mode", "get"],
+            ["conn", "list"],
+            ["rule", "list"],
+            ["controller", "status"],
+            ["core", "version"],
+        ],
+    )
+    def test_live_commands_render(
+        self,
+        runner: CliRunner,
+        enabled_controller_home: Path,
+        mock_controller_server,
+        reset_mock_state,
+        args,
+    ):
+        home = enabled_controller_home
+        self._run(
+            runner,
+            ["--home", str(home), "controller", "url", "--set", mock_controller_server],
+        )
+        self._run(
+            runner,
+            ["--home", str(home), "controller", "secret", "--set", MOCK_SECRET],
+        )
+        result = self._run(runner, ["--home", str(home), *args])
+        assert result.output.strip()
+
+    def test_proxy_groups_renders_its_title(
+        self,
+        runner: CliRunner,
+        enabled_controller_home: Path,
+        mock_controller_server,
+        reset_mock_state,
+    ):
+        """Direct regression guard for the ``title=`` crash."""
+        home = enabled_controller_home
+        self._run(
+            runner,
+            ["--home", str(home), "controller", "url", "--set", mock_controller_server],
+        )
+        self._run(
+            runner,
+            ["--home", str(home), "controller", "secret", "--set", MOCK_SECRET],
+        )
+        result = self._run(runner, ["--home", str(home), "proxy", "groups"])
+        assert "Proxy groups" in result.output
+
+    def test_env_doctor_renders(self, runner: CliRunner, populated_home: Path):
+        """doctor may exit non-zero when it reports problems; it must render."""
+        result = self._run(
+            runner,
+            ["--home", str(populated_home), "env", "doctor"],
+            expect_ok=False,
+        )
+        assert result.output.strip()
+
     def test_profile_create_is_undoable(self, runner: CliRunner, home: Path):
         run_json(runner, ["--home", str(home), "profile", "create", "temp"])
         assert len(list((home / "profiles").iterdir())) == 6

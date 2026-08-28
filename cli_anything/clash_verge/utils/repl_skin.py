@@ -412,14 +412,17 @@ class ReplSkin:
     # ── Table display ─────────────────────────────────────────────────
 
     def table(self, headers: list[str], rows: list[list[str]],
-              max_col_width: int = 40):
+              max_col_width: int = 40, title: str = ""):
         """Print a formatted table with box-drawing characters.
 
         Args:
             headers: Column header strings.
             rows: List of rows, each a list of cell strings.
             max_col_width: Maximum column width before truncation.
+            title: Optional section title printed above the table.
         """
+        if title:
+            print(self._c(_BOLD + self.accent, f"  {title}"))
         if not headers:
             return
 
